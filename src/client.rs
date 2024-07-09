@@ -74,7 +74,7 @@ impl NetworkClient {
     }
 
     /// Connect to a remote server
-    pub fn connect(&mut self, addr: impl ToSocketAddrs + Send + 'static) {
+    pub fn connect(&mut self, addr: impl ToSocketAddrs + Send + Clone + 'static) {
         debug!("Starting connection");
 
         if self.is_connected() {
@@ -85,34 +85,42 @@ impl NetworkClient {
         let connection_event_sender = self.connection_events.sender.clone();
 
         self.runtime.spawn(async move {
-            let stream = match TcpStream::connect(addr).await {
-                Ok(stream) => stream,
-                Err(error) => {
-                    match network_events_sender.send(ClientNetworkEvent::Error(
-                        ClientNetworkError::ConnectionRefused(error),
-                    )) {
-                        Ok(_) => (),
-                        Err(err) => {
-                            error!("Could not send error event: {}", err);
+            for i in 0..10 {
+                let stream = match TcpStream::connect(addr.clone()).await {
+                    Ok(stream) => stream,
+                    Err(e) => {
+                        if i == 9 {
+                            match network_events_sender.send(ClientNetworkEvent::Error(
+                                ClientNetworkError::ConnectionRefused(e),
+                            )) {
+                                Ok(_) => (),
+                                Err(err) => {
+                                    error!("Could not send error event: {}", err);
+                                }
+                            };
+                            return;
+                        } else {
+                            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                            continue;
                         }
                     }
+                };
 
-                    return;
+                let addr = stream
+                    .peer_addr()
+                    .expect("Could not fetch peer_addr of existing stream");
+
+                match connection_event_sender.send((stream, addr)) {
+                    Ok(_) => (),
+                    Err(err) => {
+                        error!("Could not initiate connection: {}", err);
+                    }
                 }
-            };
 
-            let addr = stream
-                .peer_addr()
-                .expect("Could not fetch peer_addr of existing stream");
+                debug!("Connected to: {:?}", addr);
 
-            match connection_event_sender.send((stream, addr)) {
-                Ok(_) => (),
-                Err(err) => {
-                    error!("Could not initiate connection: {}", err);
-                }
+                return;
             }
-
-            debug!("Connected to: {:?}", addr);
         });
     }
 
