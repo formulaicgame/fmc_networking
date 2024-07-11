@@ -30,10 +30,16 @@ struct ServerConnection {
 }
 
 impl ServerConnection {
-    fn stop(self) {
+    fn stop(&self) {
         self.receive_task.abort();
         self.send_task.abort();
     }
+}
+
+enum ConnectionState {
+    Connecting(JoinHandle<()>),
+    Connected(ServerConnection),
+    Disconnected,
 }
 
 /// An instance of a [`NetworkClient`] is used to connect to a remote server
@@ -41,7 +47,7 @@ impl ServerConnection {
 #[derive(Resource)]
 pub struct NetworkClient {
     runtime: Runtime,
-    server_connection: Option<ServerConnection>,
+    connection: ConnectionState,
     recv_message_map: Arc<DashMap<&'static str, Vec<Box<dyn NetworkMessage>>>>,
     network_events: SyncChannel<ClientNetworkEvent>,
     connection_events: SyncChannel<(TcpStream, SocketAddr)>,
@@ -49,7 +55,7 @@ pub struct NetworkClient {
 
 impl std::fmt::Debug for NetworkClient {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(conn) = self.server_connection.as_ref() {
+        if let ConnectionState::Connected(conn) = &self.connection {
             write!(f, "NetworkClient [Connected to {}]", conn.peer_addr)?;
         } else {
             write!(f, "NetworkClient [Not Connected]")?;
@@ -66,7 +72,7 @@ impl NetworkClient {
                 .enable_all()
                 .build()
                 .expect("Could not build tokio runtime"),
-            server_connection: None,
+            connection: ConnectionState::Disconnected,
             recv_message_map: Arc::new(DashMap::new()),
             network_events: SyncChannel::new(),
             connection_events: SyncChannel::new(),
@@ -84,7 +90,7 @@ impl NetworkClient {
         let network_events_sender = self.network_events.sender.clone();
         let connection_event_sender = self.connection_events.sender.clone();
 
-        self.runtime.spawn(async move {
+        self.connection = ConnectionState::Connecting(self.runtime.spawn(async move {
             for i in 0..10 {
                 let stream = match TcpStream::connect(addr.clone()).await {
                     Ok(stream) => stream,
@@ -121,7 +127,7 @@ impl NetworkClient {
 
                 return;
             }
-        });
+        }));
     }
 
     /// Initiate a disconnect, it will not disconnect before the next update cycle.
@@ -145,9 +151,8 @@ impl NetworkClient {
     /// The message is voided if the client is/has been disconnected.
     pub fn send_message<T: ServerBound>(&self, message: T) {
         debug!("Sending message to server");
-        let server_connection = match self.server_connection.as_ref() {
-            Some(server) => server,
-            None => return,
+        let ConnectionState::Connected(server_connection) = &self.connection else {
+            return;
         };
 
         let packet = NetworkPacket {
@@ -168,22 +173,21 @@ impl NetworkClient {
     }
 
     pub fn connection_id(&self) -> ConnectionId {
+        let addr = match &self.connection {
+            ConnectionState::Connected(server_connection) => server_connection.peer_addr,
+            _ => SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0),
+        };
         ConnectionId {
             entity: Entity::PLACEHOLDER,
-            addr: self
-                .server_connection
-                .as_ref()
-                .map(|conn| conn.peer_addr)
-                .unwrap_or_else(|| SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0)),
+            addr,
         }
     }
 
-    /// Returns true if the client has an established connection
+    /// Returns true if the client has an established connection or is establishing one.
     ///
-    /// # Note
-    /// This may return true even if the connection has already been broken on the server side.
+    /// NOTE: This may return true even if the connection has already been broken on the server side.
     pub fn is_connected(&self) -> bool {
-        self.server_connection.is_some()
+        !matches!(self.connection, ConnectionState::Disconnected)
     }
 }
 
@@ -252,7 +256,7 @@ pub fn handle_connection_event(
     let (send_message, recv_message) = unbounded_channel();
     let send_settings = NetworkSettings::default();
 
-    net_res.server_connection = Some(ServerConnection {
+    net_res.connection = ConnectionState::Connected(ServerConnection {
         peer_addr,
         send_task: net_res.runtime.spawn(async move {
             let mut recv_message = recv_message;
@@ -387,10 +391,16 @@ pub fn handle_client_network_events(
     for event in net.network_events.receiver.try_iter() {
         match event {
             ClientNetworkEvent::Error(_) | ClientNetworkEvent::Disconnected(_) => {
-                if let Some(connection) = net.server_connection.take() {
-                    connection.stop();
+                match &net.connection {
+                    ConnectionState::Connecting(task) => task.abort(),
+                    ConnectionState::Connected(server_connection) => {
+                        server_connection.stop();
+                        client_network_events.send(event);
+                    }
+                    ConnectionState::Disconnected => unreachable!(),
                 }
-                client_network_events.send(event);
+                net.connection = ConnectionState::Disconnected;
+
                 // There might be many errors when something bad happens, so just send the first
                 // one. The others will be cleared on event buffer rotation at the end of the
                 // update.
