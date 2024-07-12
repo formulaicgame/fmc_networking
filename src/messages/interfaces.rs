@@ -196,12 +196,12 @@ impl Line {
 
 /// A set of text updates for a single item box
 #[derive(NetworkMessage, ClientBound, Serialize, Deserialize, Debug, Clone, Default)]
-pub struct InterfaceTextBoxUpdate {
+pub struct InterfaceTextUpdate {
     pub interface_path: String,
     pub lines: Vec<Line>,
 }
 
-impl InterfaceTextBoxUpdate {
+impl InterfaceTextUpdate {
     pub fn new(interface_path: &str) -> Self {
         Self {
             interface_path: interface_path.to_owned(),

@@ -29,7 +29,7 @@ pub use player::{
 mod interfaces;
 pub use interfaces::{
     InterfaceClose, InterfaceEquipItem, InterfaceInteraction, InterfaceItemBoxUpdate,
-    InterfaceOpen, InterfaceTextBoxUpdate, InterfaceTextInput, InterfaceVisibilityUpdate,
+    InterfaceOpen, InterfaceTextInput, InterfaceTextUpdate, InterfaceVisibilityUpdate,
 };
 
 mod audio;

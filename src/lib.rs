@@ -235,7 +235,7 @@ impl Plugin for ClientPlugin {
             .init_resource::<NetworkSettings>()
             .add_systems(PreUpdate, client::handle_connection_event)
             .add_systems(Update, client::handle_client_network_events)
-            .listen_for_client_message::<messages::InterfaceTextBoxUpdate>()
+            .listen_for_client_message::<messages::InterfaceTextUpdate>()
             .listen_for_client_message::<messages::InterfaceVisibilityUpdate>()
             .listen_for_client_message::<messages::InterfaceItemBoxUpdate>()
             .listen_for_client_message::<messages::InterfaceOpen>()
