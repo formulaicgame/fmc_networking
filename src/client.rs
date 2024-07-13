@@ -380,6 +380,7 @@ pub fn handle_client_network_events(
     mut server_disconnect_events: EventReader<NetworkData<crate::messages::Disconnect>>,
     mut client_network_events: EventWriter<ClientNetworkEvent>,
 ) {
+    // Disconnect event from the server
     for event in server_disconnect_events.read() {
         net.network_events
             .sender
@@ -393,12 +394,10 @@ pub fn handle_client_network_events(
             ClientNetworkEvent::Error(_) | ClientNetworkEvent::Disconnected(_) => {
                 match &net.connection {
                     ConnectionState::Connecting(task) => task.abort(),
-                    ConnectionState::Connected(server_connection) => {
-                        server_connection.stop();
-                        client_network_events.send(event);
-                    }
-                    ConnectionState::Disconnected => unreachable!(),
+                    ConnectionState::Connected(server_connection) => server_connection.stop(),
+                    ConnectionState::Disconnected => (),
                 }
+                client_network_events.send(event);
                 net.connection = ConnectionState::Disconnected;
 
                 // There might be many errors when something bad happens, so just send the first
