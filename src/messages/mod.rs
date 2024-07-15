@@ -28,8 +28,9 @@ pub use player::{
 /// User interface
 mod interfaces;
 pub use interfaces::{
-    InterfaceClose, InterfaceEquipItem, InterfaceInteraction, InterfaceItemBoxUpdate,
-    InterfaceOpen, InterfaceTextInput, InterfaceTextUpdate, InterfaceVisibilityUpdate,
+    InterfaceEquipItem, InterfaceInteraction, InterfaceItemBoxUpdate,
+    InterfaceNodeVisibilityUpdate, InterfaceTextInput, InterfaceTextUpdate,
+    InterfaceVisibilityUpdate,
 };
 
 mod audio;
