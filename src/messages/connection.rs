@@ -7,7 +7,7 @@ use crate::BlockId;
 
 /// Sent by client to notify the server that it has processed all assets and is ready to be served.
 #[derive(NetworkMessage, ServerBound, Serialize, Deserialize, Debug, Clone)]
-pub struct ClientFinishedLoading;
+pub struct ClientReady;
 
 /// Initial server configuration needed for client setup.
 #[derive(Resource, NetworkMessage, ClientBound, Serialize, Deserialize, Debug, Clone)]

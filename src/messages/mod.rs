@@ -1,8 +1,7 @@
 /// Everything that happens on connection and disconnection
 mod connection;
 pub use connection::{
-    AssetRequest, AssetResponse, ClientFinishedLoading, ClientIdentification, Disconnect,
-    ServerConfig, Time,
+    AssetRequest, AssetResponse, ClientIdentification, ClientReady, Disconnect, ServerConfig, Time,
 };
 
 /// Chunk management

@@ -17,10 +17,10 @@ use tokio::{
 };
 
 use crate::{
-    messages::ClientIdentification,
+    messages::{AssetRequest, AssetResponse, ClientIdentification, ClientReady, ServerConfig},
     network_message::{ClientBound, NetworkMessage, ServerBound},
-    ConnectionId, NetworkData, NetworkPacket, NetworkSettings, ServerNetworkEvent, SyncChannel,
-    Username,
+    ConnectionId, NetworkData, NetworkPacket, ServerNetworkEvent, SyncChannel, Username,
+    MAX_PACKET_LENGTH,
 };
 
 struct NewConnection {
@@ -95,7 +95,11 @@ impl NetworkServer {
     ///
     /// ## Note
     /// If you are already listening for new connections, then this will disconnect existing connections first
-    pub fn listen(&mut self, addr: impl ToSocketAddrs + Send + 'static) {
+    pub fn start(
+        &mut self,
+        addr: impl ToSocketAddrs + Send + 'static,
+        server_config: ServerConfig,
+    ) {
         self.stop();
 
         let runtime = tokio::runtime::Builder::new_multi_thread()
@@ -133,7 +137,11 @@ impl NetworkServer {
                     }
                 }
 
-                tokio::task::spawn(verify_connection(socket, new_connections.clone()));
+                tokio::task::spawn(initialize_connection(
+                    socket,
+                    server_config.clone(),
+                    new_connections.clone(),
+                ));
             }
         };
 
@@ -219,20 +227,11 @@ impl NetworkServer {
     }
 }
 
-// TODO: This is just a copy of 'recv_task' with all the things that errored removed. Look it over
-// and clean it up if necessary.
-async fn verify_connection(
-    mut socket: TcpStream,
-    new_connections: crossbeam_channel::Sender<NewConnection>,
-) {
-    let length = match tokio::time::timeout(
-        std::time::Duration::from_millis(500),
-        socket.read_u32(),
-    )
-    .await
-    {
-        Ok(Ok(len)) => len as usize,
-        _ => return,
+// For use during initialization
+async fn read_packet(socket: &mut TcpStream) -> Option<NetworkPacket> {
+    let length = match socket.read_u32().await {
+        Ok(len) => len as usize,
+        _ => return None,
     };
 
     const MAX_LENGTH: usize = 100;
@@ -243,7 +242,7 @@ async fn verify_connection(
             length,
             MAX_LENGTH
         );
-        return;
+        return None;
     }
 
     let mut buffer = vec![0; length];
@@ -257,7 +256,7 @@ async fn verify_connection(
                 socket.peer_addr().unwrap(),
                 err
             );
-            return;
+            return None;
         }
     }
 
@@ -269,32 +268,116 @@ async fn verify_connection(
                 socket.peer_addr().unwrap(),
                 err
             );
+            return None;
+        }
+    };
+    Some(packet)
+}
+
+async fn send_packet(
+    mut socket: impl AsyncWriteExt + Unpin,
+    packet: NetworkPacket,
+    buffer: &mut [u8],
+) {
+    let size = match bincode::serialized_size(&packet) {
+        Ok(size) => size as usize,
+        Err(err) => {
+            error!("Could not encode packet {:?}: {}", packet, err);
             return;
         }
     };
 
-    let identity: ClientIdentification = match packet.data.downcast() {
-        Ok(v) => *v,
-        Err(_) => return,
+    match bincode::serialize_into(&mut buffer[0..size], &packet) {
+        Ok(_) => (),
+        Err(err) => {
+            error!(
+                "Could not serialize packet into buffer {:?}: {}",
+                packet, err
+            );
+            return;
+        }
     };
 
-    if let Err(err) = new_connections.send(NewConnection {
-        socket,
-        username: identity.name,
-    }) {
-        error!("Cannot accept new connections, channel closed: {}", err);
-        return;
+    match socket.write_u32(size as u32).await {
+        Ok(_) => (),
+        Err(err) => {
+            error!("Could not send packet length: {:?}: {}", size, err);
+            return;
+        }
+    }
+
+    match socket.write_all(&buffer[0..size]).await {
+        Ok(_) => (),
+        Err(err) => {
+            error!("Could not send packet: {:?}: {}", packet, err);
+            return;
+        }
+    }
+}
+
+// TODO: This is just a copy of 'recv_task' with all the things that errored removed. Look it over
+// and clean it up if necessary.
+async fn initialize_connection(
+    mut socket: TcpStream,
+    server_config: ServerConfig,
+    new_connections: crossbeam_channel::Sender<NewConnection>,
+) {
+    let mut buffer = vec![0; MAX_PACKET_LENGTH];
+    let identity: ClientIdentification = match read_packet(&mut socket).await {
+        Some(packet) => match packet.data.downcast() {
+            Ok(v) => *v,
+            Err(_) => return,
+        },
+        None => return,
+    };
+
+    send_packet(
+        &mut socket,
+        NetworkPacket {
+            kind: ServerConfig::NAME.to_owned(),
+            data: Box::new(server_config),
+        },
+        &mut buffer,
+    )
+    .await;
+
+    // TODO: Client can request assets repeatedly
+    while let Some(packet) = read_packet(&mut socket).await {
+        if packet.data.downcast_ref::<AssetRequest>().is_some() {
+            let asset_archive = std::fs::read("resources/assets.tar").unwrap();
+            send_packet(
+                &mut socket,
+                NetworkPacket {
+                    kind: AssetResponse::NAME.to_owned(),
+                    data: Box::new(AssetResponse {
+                        file: asset_archive,
+                    }),
+                },
+                &mut buffer,
+            )
+            .await
+        } else if packet.data.downcast_ref::<ClientReady>().is_some() {
+            if let Err(err) = new_connections.send(NewConnection {
+                socket,
+                username: identity.name,
+            }) {
+                error!("Cannot accept new connections, channel closed: {}", err);
+                return;
+            }
+            return;
+        } else {
+            return;
+        }
     }
 }
 
 async fn recv_task(
     conn_id: ConnectionId,
     recv_message_map: Arc<DashMap<&'static str, Vec<(ConnectionId, Box<dyn NetworkMessage>)>>>,
-    network_settings: NetworkSettings,
     mut read_socket: tcp::OwnedReadHalf,
     disconnected_connections: crossbeam_channel::Sender<ConnectionId>,
 ) {
-    let mut buffer: Vec<u8> = vec![0; network_settings.max_packet_length];
+    let mut buffer: Vec<u8> = vec![0; MAX_PACKET_LENGTH];
 
     trace!("Starting receive task for {}", conn_id);
 
@@ -319,10 +402,10 @@ async fn recv_task(
 
         trace!("Received packet with length: {}", length);
 
-        if length > network_settings.max_packet_length {
+        if length > MAX_PACKET_LENGTH {
             error!(
                 "Received too large packet from [{}]: {} > {}",
-                conn_id, length, network_settings.max_packet_length
+                conn_id, length, MAX_PACKET_LENGTH
             );
             break;
         }
@@ -377,9 +460,8 @@ async fn recv_task(
 async fn send_task(
     mut recv_message: Receiver<NetworkPacket>,
     mut send_socket: tcp::OwnedWriteHalf,
-    network_settings: NetworkSettings,
 ) {
-    let mut buffer: Vec<u8> = vec![0; network_settings.max_packet_length];
+    let mut buffer: Vec<u8> = vec![0; MAX_PACKET_LENGTH];
 
     while let Some(message) = recv_message.recv().await {
         let size = match bincode::serialized_size(&message) {
@@ -422,7 +504,6 @@ async fn send_task(
 pub(crate) fn handle_connections(
     mut commands: Commands,
     server: Res<NetworkServer>,
-    network_settings: Res<NetworkSettings>,
     mut network_events: EventWriter<ServerNetworkEvent>,
 ) {
     for connection in server.new_connections.receiver.try_iter() {
@@ -440,7 +521,7 @@ pub(crate) fn handle_connections(
 
         let (read_socket, send_socket) = connection.socket.into_split();
 
-        // TODO: I changed this from an unbounded channel because of some memory issue I could't
+        // TODO: I changed this from an unbounded channel because of some memory issue I couldn't
         // diagnose.
         let (send_message, recv_message) = channel(10);
 
@@ -452,15 +533,14 @@ pub(crate) fn handle_connections(
                 receive_task: server.runtime.as_ref().unwrap().spawn(recv_task(
                     connection_id,
                     server.recv_message_map.clone(),
-                    network_settings.clone(),
                     read_socket,
                     server.disconnected_connections.sender.clone(),
                 )),
-                send_task: server.runtime.as_ref().unwrap().spawn(send_task(
-                    recv_message,
-                    send_socket,
-                    network_settings.clone(),
-                )),
+                send_task: server
+                    .runtime
+                    .as_ref()
+                    .unwrap()
+                    .spawn(send_task(recv_message, send_socket)),
                 send_message,
                 addr,
             },

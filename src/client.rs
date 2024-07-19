@@ -17,7 +17,7 @@ use tokio::{
 use crate::{
     error::ClientNetworkError,
     network_message::{ClientBound, NetworkMessage, ServerBound},
-    ClientNetworkEvent, ConnectionId, NetworkData, NetworkPacket, NetworkSettings, SyncChannel,
+    ClientNetworkEvent, ConnectionId, NetworkData, NetworkPacket, SyncChannel, MAX_PACKET_LENGTH,
 };
 
 #[derive(Display)]
@@ -254,14 +254,13 @@ pub fn handle_connection_event(
     let (read_socket, send_socket) = connection.into_split();
     let recv_message_map = net_res.recv_message_map.clone();
     let (send_message, recv_message) = unbounded_channel();
-    let send_settings = NetworkSettings::default();
 
     net_res.connection = ConnectionState::Connected(ServerConnection {
         peer_addr,
         send_task: net_res.runtime.spawn(async move {
             let mut recv_message = recv_message;
             let mut send_socket = send_socket;
-            let mut buffer: Vec<u8> = vec![0; send_settings.max_packet_length];
+            let mut buffer: Vec<u8> = vec![0; MAX_PACKET_LENGTH];
 
             while let Some(message) = recv_message.recv().await {
                 let size = match bincode::serialized_size(&message) {
@@ -311,10 +310,9 @@ pub fn handle_connection_event(
         }),
         receive_task: net_res.runtime.spawn(async move {
             let mut read_socket = read_socket;
-            let network_settings = NetworkSettings::default();
             let recv_message_map = recv_message_map;
 
-            let mut buffer: Vec<u8> = vec![0; network_settings.max_packet_length];
+            let mut buffer: Vec<u8> = vec![0; MAX_PACKET_LENGTH];
             loop {
                 let length = match read_socket.read_u32().await {
                     Ok(len) => len as usize,
@@ -327,10 +325,10 @@ pub fn handle_connection_event(
                     }
                 };
 
-                if length > network_settings.max_packet_length {
+                if length > MAX_PACKET_LENGTH {
                     error!(
                         "Received too large packet from [{}]: {} > {}",
-                        peer_addr, length, network_settings.max_packet_length
+                        peer_addr, length, MAX_PACKET_LENGTH
                     );
                     break;
                 }

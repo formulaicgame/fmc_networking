@@ -159,24 +159,12 @@ impl<T> NetworkData<T> {
     }
 }
 
-// TODO: Remove this, vestige of being adaptable
-#[derive(Clone, Debug)]
-#[allow(missing_copy_implementations)]
-#[derive(Resource)]
-/// Settings to configure the network
-pub struct NetworkSettings {
-    /// Maximum packet size in bytes. If a client ever exceeds this size, it will be disconnected
-    /// The default is set to 10MiB
-    pub max_packet_length: usize,
-}
-
-impl Default for NetworkSettings {
-    fn default() -> Self {
-        NetworkSettings {
-            max_packet_length: 10 * 1024 * 1024,
-        }
-    }
-}
+// TODO: This is used in the client, but should be separate. The server probably doesn't need more
+// than a few kb, but the client will get up to many mb for the assets.
+//
+/// Maximum packet size in bytes. If a client ever exceeds this size, it will be disconnected
+/// 10MiB
+const MAX_PACKET_LENGTH: usize = 10 * 1024 * 1024;
 
 #[derive(Default, Copy, Clone, Debug)]
 /// The plugin to add to your bevy app when you want to instantiate a server
@@ -186,7 +174,6 @@ impl Plugin for ServerPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(NetworkServer::new())
             .add_event::<ServerNetworkEvent>()
-            .init_resource::<NetworkSettings>()
             .add_systems(
                 PreUpdate,
                 (
@@ -205,14 +192,14 @@ impl Plugin for ServerPlugin {
                     //
                     // It is purposefully 'before' and not 'after' here, so it can go:
                     // 1. Send disconnect event
-                    // 2. Application reacts to event, saves player state etc and processes left
-                    //    over accumulated network events.
+                    // 2. Application reacts to event, saves player state etc and processes
+                    //    accumulated network events.
                     // 3. A tick after, the connection entity is despawned
                     server::handle_disconnection_events.before(server::send_disconnection_events),
                     server::send_disconnection_events,
                 ),
             )
-            .listen_for_server_message::<messages::ClientFinishedLoading>()
+            .listen_for_server_message::<messages::ClientReady>()
             .listen_for_server_message::<messages::PlayerCameraRotation>()
             .listen_for_server_message::<messages::PlayerPosition>()
             .listen_for_server_message::<messages::LeftClick>()
@@ -232,7 +219,6 @@ impl Plugin for ClientPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(NetworkClient::new())
             .add_event::<ClientNetworkEvent>()
-            .init_resource::<NetworkSettings>()
             .add_systems(PreUpdate, client::handle_connection_event)
             .add_systems(Update, client::handle_client_network_events)
             .listen_for_client_message::<messages::InterfaceTextUpdate>()
