@@ -1,16 +1,17 @@
-use fmc_networking_derive::{ClientBound, NetworkMessage, ServerBound};
+use bevy::prelude::Event;
+use fmc_protocol_derive::{ClientBound, ServerBound};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// Change the visibility of an interface
-#[derive(NetworkMessage, ClientBound, Serialize, Deserialize, Debug, Clone)]
+#[derive(ClientBound, Event, Serialize, Deserialize, Debug, Clone)]
 pub struct InterfaceVisibilityUpdate {
     pub interface_path: String,
     pub visible: bool,
 }
 
 /// Changes the visibility of nodes within interfaces
-#[derive(NetworkMessage, ClientBound, Serialize, Deserialize, Debug, Clone, Default)]
+#[derive(ClientBound, Event, Serialize, Deserialize, Debug, Clone, Default)]
 pub struct InterfaceNodeVisibilityUpdate {
     /// List of (interface node path, visibility[true for visible, false for hidden]).
     pub updates: Vec<(String, bool)>,
@@ -47,7 +48,7 @@ pub struct ItemStack {
 }
 
 /// Update the content of an interface.
-#[derive(NetworkMessage, ClientBound, Serialize, Deserialize, Debug, Clone, Default)]
+#[derive(ClientBound, Event, Serialize, Deserialize, Debug, Clone, Default)]
 pub struct InterfaceItemBoxUpdate {
     /// Remove the previous item boxes before adding these. If this is true, the updates are
     /// assumed to be ordered. The index will be ignored.
@@ -112,8 +113,8 @@ impl InterfaceItemBoxUpdate {
     }
 }
 
-/// Move items within an interface
-#[derive(NetworkMessage, ServerBound, Serialize, Deserialize, Debug, Clone)]
+/// The different ways a client can interact with an interface
+#[derive(ServerBound, Serialize, Deserialize, Debug, Clone)]
 pub enum InterfaceInteraction {
     TakeItem {
         /// Interface identifier, formatted like "root/child/grandchild/..etc", e.g.
@@ -140,7 +141,7 @@ pub enum InterfaceInteraction {
 }
 
 /// Tell the server which item is held in the hand
-#[derive(NetworkMessage, ServerBound, Serialize, Deserialize, Debug, Clone)]
+#[derive(ServerBound, Serialize, Deserialize, Debug, Clone)]
 pub struct InterfaceEquipItem {
     /// Interface identifier, formatted like "root/child/grandchild/..etc", e.g.
     /// "inventory/crafting_table"
@@ -176,7 +177,7 @@ impl Line {
 }
 
 /// A set of text updates for a text container
-#[derive(NetworkMessage, ClientBound, Serialize, Deserialize, Debug, Clone, Default)]
+#[derive(ClientBound, Event, Serialize, Deserialize, Debug, Clone, Default)]
 pub struct InterfaceTextUpdate {
     pub interface_path: String,
     pub lines: Vec<Line>,
@@ -226,7 +227,7 @@ impl InterfaceTextUpdate {
 }
 
 /// Send the server the content of a text box
-#[derive(NetworkMessage, ServerBound, Serialize, Deserialize, Debug, Clone, Default)]
+#[derive(ServerBound, Serialize, Deserialize, Debug, Clone, Default)]
 pub struct InterfaceTextInput {
     /// Path of the text box
     pub interface_path: String,

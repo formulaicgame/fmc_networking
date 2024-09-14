@@ -1,10 +1,10 @@
 use bevy::{math::DVec3, prelude::*};
 
-use fmc_networking_derive::{ClientBound, NetworkMessage};
+use fmc_protocol_derive::ClientBound;
 use serde::{Deserialize, Serialize};
 
 /// Spawn a new model.
-#[derive(NetworkMessage, ClientBound, Serialize, Deserialize, Debug, Clone)]
+#[derive(ClientBound, Event, Serialize, Deserialize, Debug, Clone)]
 pub struct NewModel {
     /// Id used to reference it when updating. If the same id is sent twice, the old model will be
     /// replaced.
@@ -23,14 +23,14 @@ pub struct NewModel {
 }
 
 /// Delete an existing model.
-#[derive(NetworkMessage, ClientBound, Serialize, Deserialize, Debug, Clone)]
+#[derive(ClientBound, Event, Serialize, Deserialize, Debug, Clone)]
 pub struct DeleteModel {
     /// Id of the model
     pub id: u32,
 }
 
 /// Update the asset used by a model.
-#[derive(NetworkMessage, ClientBound, Serialize, Deserialize, Debug, Clone)]
+#[derive(ClientBound, Event, Serialize, Deserialize, Debug, Clone)]
 pub struct ModelUpdateAsset {
     /// Id of the model
     pub id: u32,
@@ -39,7 +39,7 @@ pub struct ModelUpdateAsset {
 }
 
 /// Update the transform of a model.
-#[derive(NetworkMessage, ClientBound, Serialize, Deserialize, Debug, Clone)]
+#[derive(ClientBound, Event, Serialize, Deserialize, Debug, Clone)]
 pub struct ModelUpdateTransform {
     /// Id of the model
     pub id: u32,
@@ -52,7 +52,7 @@ pub struct ModelUpdateTransform {
 }
 
 /// Play an animation of a model
-#[derive(NetworkMessage, ClientBound, Serialize, Deserialize, Debug, Clone)]
+#[derive(ClientBound, Event, Serialize, Deserialize, Debug, Clone)]
 pub struct ModelPlayAnimation {
     /// Id of the model
     pub model_id: u32,

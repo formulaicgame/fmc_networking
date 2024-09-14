@@ -1,24 +1,10 @@
 [package]
-name = "fmc_networking"
-version = "0.5.1"
+name = "fmc_protocol"
+version = "0.1.0"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+license = "MIT OR Apache-2.0"
 
 [dependencies]
-serde_json = { git = "https://github.com/fmcgg/json"}
-
-bevy = { version = "0.13.2", features = [], default-features = false }
-bincode = "1.3.3"
-crossbeam-channel = "0.5.8"
-dashmap = "5.5.3"
-derive_more = "0.99.17"
-downcast-rs = "1.2.0"
+bevy = { version = "0.14.2", features = [], default-features = false }
 serde = { version = "1.0.188", features = ["derive"] }
-thiserror = "1.0.48"
-tokio = { version = "1.32.0", features = ["net", "io-util", "sync", "rt-multi-thread", "time"] }
-typetag = "0.2.13"
-fmc_networking_derive = { path = "./fmc_networking_derive" }
-
-#[dev-dependencies]
-#bevy = { version = "0.6.1" }
+fmc_protocol_derive = { path = "./fmc_protocol_derive" }

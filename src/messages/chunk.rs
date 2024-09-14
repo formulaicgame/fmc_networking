@@ -2,11 +2,11 @@ use std::collections::HashMap;
 
 use crate::BlockId;
 use bevy::prelude::*;
-use fmc_networking_derive::{ClientBound, NetworkMessage};
+use fmc_protocol_derive::ClientBound;
 use serde::{Deserialize, Serialize};
 
 /// A chunk of blocks sent to a client
-#[derive(NetworkMessage, ClientBound, Serialize, Deserialize, Debug, Clone)]
+#[derive(ClientBound, Event, Serialize, Deserialize, Debug, Clone)]
 pub struct Chunk {
     /// The position the chunk takes in the block grid.
     pub position: IVec3,
