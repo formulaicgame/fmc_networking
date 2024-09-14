@@ -3,8 +3,9 @@ name = "fmc_protocol"
 version = "0.1.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
+repository = "https://github.com/formulaicgame/fmc_protocol"
 
 [dependencies]
 bevy = { version = "0.14.2", features = [], default-features = false }
 serde = { version = "1.0.188", features = ["derive"] }
-fmc_protocol_derive = { path = "./fmc_protocol_derive" }
+fmc_protocol_derive = { path = "./fmc_protocol_derive", version = "0.1.0" }
