@@ -51,6 +51,7 @@ pub enum MessageType {
     ModelUpdateAsset,
     ModelUpdateTransform,
     NewModel,
+    SpawnCustomModel,
     LeftClick,
     RightClick,
     RenderDistance,

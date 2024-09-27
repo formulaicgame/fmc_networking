@@ -16,6 +16,7 @@ pub use blocks::BlockUpdates;
 mod models;
 pub use models::{
     DeleteModel, ModelPlayAnimation, ModelUpdateAsset, ModelUpdateTransform, NewModel,
+    SpawnCustomModel,
 };
 
 /// Changes to the player.
